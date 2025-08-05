@@ -294,7 +294,7 @@ async def get_manager_analytics(current_user = Depends(get_current_user)):
         "total_reps": len(reps),
         "rep_names": reps,
         "common_objections": [{"objection": obj, "count": count} for obj, count in common_objections],
-        "recent_calls": len([call for call in calls if datetime.fromisoformat(call["call_date"].replace('Z', '+00:00')) > datetime.now().replace(tzinfo=None) - timedelta(days=7)])
+        "recent_calls": len([call for call in calls if datetime.fromisoformat(call["call_date"].replace('Z', '+00:00')).replace(tzinfo=None) > datetime.now() - timedelta(days=7)])
     }
 
 @app.get("/api/reps")
