@@ -309,6 +309,64 @@ async def get_reps(current_user = Depends(get_current_user)):
     
     return reps
 
+@app.post("/api/chat")
+async def chat_with_ai(chat_data: ChatMessage, current_user = Depends(get_current_user)):
+    """Chat with AI about calls or general sales topics"""
+    from services.gemini_client import gemini_client
+    
+    try:
+        if chat_data.call_id:
+            # Chat about specific call
+            call = calls_collection.find_one({"id": chat_data.call_id})
+            if not call:
+                raise HTTPException(status_code=404, detail="Call not found")
+            
+            # Check if user has access to this call
+            if current_user["role"] == "rep" and call["rep_id"] != current_user["id"]:
+                raise HTTPException(status_code=403, detail="Access denied")
+            
+            response = gemini_client.chat_about_call(chat_data.message, call)
+        else:
+            # General sales chat
+            response = gemini_client.general_sales_chat(chat_data.message, current_user["role"])
+        
+        # Store chat conversation
+        chat_doc = {
+            "id": str(uuid.uuid4()),
+            "user_id": current_user["id"],
+            "call_id": chat_data.call_id,
+            "message": chat_data.message,
+            "response": response,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        chats_collection.insert_one(chat_doc)
+        
+        return {
+            "response": response,
+            "timestamp": chat_doc["timestamp"]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
+
+@app.get("/api/chat/history")
+async def get_chat_history(
+    call_id: Optional[str] = None,
+    limit: int = 20,
+    current_user = Depends(get_current_user)
+):
+    """Get chat history for user"""
+    query = {"user_id": current_user["id"]}
+    if call_id:
+        query["call_id"] = call_id
+    
+    chats = list(chats_collection.find(query).sort("timestamp", -1).limit(limit))
+    
+    for chat in chats:
+        chat["_id"] = str(chat["_id"])
+    
+    return chats
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
